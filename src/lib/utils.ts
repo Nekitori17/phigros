@@ -617,7 +617,7 @@ export const getParams = (url?: string, loadFromStorage = true): Config | null =
       difficulty: difficulty !== null ? parseFloat(difficulty) : null,
     },
     preferences: {
-      aspectRatio: aspectRatio.length >= 2 ? [aspectRatio[0], aspectRatio[1]] : null,
+      aspectRatio: aspectRatio.length >= 2 ? [aspectRatio[0], aspectRatio[1]] : [16, 9],
       backgroundBlur,
       backgroundLuminance,
       chartFlipping,

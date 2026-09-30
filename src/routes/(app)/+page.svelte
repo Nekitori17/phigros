@@ -165,6 +165,10 @@
   const DUPLICATE_CHOICE_KEY = 'duplicateImportChoice';
   // Set by the player after saving an offset-adjusted chart; the landing page
   // checks it on mount and via storage events to reload the saved chart.
+  const DEFAULT_CHART_URL = `${base}/TheNextArcady.zip`;
+  const DEFAULT_CHART_SOURCE_NAME = 'TheNextArcady.zip';
+  const DEFAULT_CHART_LOADED_KEY = 'defaultChartLoaded:TheNextArcady';
+
   const RELOAD_CHART_KEY = 'reloadChartId';
   let duplicateModal: HTMLDialogElement;
   let duplicateModalMem = false;
@@ -182,7 +186,7 @@
   let selectedBundle = -1;
   let currentBundle: ChartBundle | undefined;
   let preferences: Preferences = {
-    aspectRatio: [3, 2],
+    aspectRatio: [16, 9],
     backgroundBlur: 1,
     backgroundLuminance: 0.5,
     chartFlipping: 0,
@@ -199,7 +203,7 @@
   };
   let toggles = {
     autostart: false,
-    autoplay: true,
+    autoplay: false,
     practice: false,
     adjustOffset: false,
     render: false,
@@ -319,6 +323,51 @@
     return new File([new Uint8Array(data)], path.split(/[\\/]/).pop() || path);
   };
 
+  /**
+   * Load the bundled default chart (`static/TheNextArcady.zip`) on first
+   * startup so the web opens with a chart ready to play. Runs only when there
+   * is no stored chart yet and no other chart source (URL params, reload flag,
+   * or an already-loaded working state) took over. Idempotent via a
+   * localStorage flag plus a stored-chart check, so refreshes don't reimport.
+   */
+  const loadDefaultChartIfNeeded = async () => {
+    if (localStorage.getItem(DEFAULT_CHART_LOADED_KEY)) return;
+    // Don't steal an explicit chart source: URL params, the offset-reload
+    // flag, or an already-loaded working state mean input was chosen. These
+    // early returns deliberately don't set the flag so a later plain visit
+    // still retries the default import.
+    if (localStorage.getItem(RELOAD_CHART_KEY)) return;
+    if (
+      page.url.searchParams.has('file') ||
+      page.url.searchParams.has('zip') ||
+      page.url.searchParams.has('chart') ||
+      page.url.searchParams.has('song')
+    ) {
+      return;
+    }
+    if (chartFiles.length > 0 || chartBundles.length > 0 || currentBundle) return;
+    try {
+      await refreshStoredSummaries();
+      if (storedChartSummaries.length > 0) {
+        localStorage.setItem(DEFAULT_CHART_LOADED_KEY, '1');
+        return;
+      }
+      const response = await fetch(DEFAULT_CHART_URL);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const file = new File([blob], DEFAULT_CHART_SOURCE_NAME, {
+        type: 'application/zip',
+      });
+      const groups = await decompressZipArchives([file]);
+      const files = groups.flat();
+      if (files.length === 0) return;
+      await handleFiles(files, undefined, DEFAULT_CHART_SOURCE_NAME);
+      localStorage.setItem(DEFAULT_CHART_LOADED_KEY, '1');
+    } catch (e) {
+      console.warn('Failed to load default chart:', e);
+    }
+  };
+
   onMount(async () => {
     [
       { key: 'debug', name: m.debug_mode() },
@@ -362,6 +411,10 @@
     // The player may have saved an offset-adjusted chart (this window, or
     // another window/tab) — reload it so reopening applies the new offset.
     await reloadStoredChartFromFlag();
+
+    // First startup with no chart yet: preload the bundled default chart so
+    // the web opens with content ready to play.
+    await loadDefaultChartIfNeeded();
 
     addEventListener('message', async (e: MessageEvent<IncomingMessage>) => {
       const message = e.data;
@@ -525,11 +578,22 @@
     if (pref) {
       pref = JSON.parse(pref);
       if (haveSameKeys(pref, preferences)) preferences = pref;
+      // Migrate the old 3:2 default to the new 16:9 default; an explicit user
+      // choice of any other ratio is left untouched.
+      if (
+        Array.isArray(preferences.aspectRatio) &&
+        preferences.aspectRatio[0] === 3 &&
+        preferences.aspectRatio[1] === 2
+      ) {
+        preferences.aspectRatio = [16, 9];
+      }
     }
     if (tgs) {
       tgs = JSON.parse(tgs);
       if (haveSameKeys(tgs, toggles)) toggles = tgs;
     }
+    // Fresh defaults already set above (autoplay: false); stored toggles are
+    // only applied when present, so existing users keep their own choice.
     if (mopts) {
       mopts = JSON.parse(mopts);
       if (haveSameKeys(mopts, mediaOptions)) mediaOptions = mopts;
