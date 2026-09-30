@@ -226,6 +226,16 @@ export class Line {
 
   private _attachedVideos: Video[] = [];
 
+  /**
+   * Whether the line body itself may be shown. Lines carrying a UI/video
+   * attachment hide their body unless the chart opts back in via
+   * `appearanceOnAttach` (1 = white, 2 = FC/AP tinted); text lines always
+   * show their text.
+   */
+  private get isLineBodyVisible(): boolean {
+    return !this._hasAttach || !!this._data.appearanceOnAttach || this._hasText;
+  }
+
   private _debug: GameObjects.Container | undefined = undefined;
   private _selfDebug: GameObjects.Container | undefined = undefined;
 
@@ -294,7 +304,7 @@ export class Line {
         : this._scene.o(1) * this._scene.preferences.lineThickness * (this._scaleY ?? 1.35),
     ); // previously 1.0125 (according to the official definition that a line is 3 times as wide as the screen)
     this._line.setDepth(lineData.zIndex !== undefined ? lineData.zIndex : 2 + precedence);
-    this._line.setVisible(!this._hasAttach || !!lineData.appearanceOnAttach || this._hasText);
+    this._line.setVisible(this.isLineBodyVisible);
     if (!this._hasCustomTexture && (!this._hasAttach || lineData.appearanceOnAttach === 2))
       this._line.setTint(getLineColor(scene));
     if (this._data.anchor) this._line.setOrigin(this._data.anchor[0], 1 - this._data.anchor[1]);
@@ -694,8 +704,10 @@ export class Line {
     // Fully transparent lines are excluded from the render list entirely —
     // event-heavy charts keep the vast majority of their lines at opacity 0
     // at any moment, and Phaser otherwise still traverses and builds commands
-    // for every one of them each frame.
-    const visible = targetAlpha > 0;
+    // for every one of them each frame. Lines with a UI/video attachment hide
+    // their body (unless appearanceOnAttach opts back in), so alpha alone must
+    // not re-show them here.
+    const visible = targetAlpha > 0 && this.isLineBodyVisible;
     if (line.visible !== visible) line.setVisible(visible);
     if (line.alpha !== targetAlpha) line.setAlpha(targetAlpha);
     const x = this._posX;
@@ -1070,7 +1082,7 @@ export class Line {
     this._attachedVideos.push(video);
     this._hasAttach = true;
     this._line.clearTint();
-    this._line.setVisible(!!this._data.appearanceOnAttach || this._hasText);
+    this._line.setVisible(this.isLineBodyVisible);
   }
 
   public get notes() {
@@ -1122,10 +1134,7 @@ export class Line {
   }
 
   setVisible(visible: boolean) {
-    [
-      !this._hasAttach || this._data.appearanceOnAttach ? this._line : undefined,
-      ...this._noteContainersArr,
-    ].forEach((obj) => {
+    [this.isLineBodyVisible ? this._line : undefined, ...this._noteContainersArr].forEach((obj) => {
       obj?.setVisible(visible);
     });
   }
