@@ -165,9 +165,10 @@
   const DUPLICATE_CHOICE_KEY = 'duplicateImportChoice';
   // Set by the player after saving an offset-adjusted chart; the landing page
   // checks it on mount and via storage events to reload the saved chart.
-  const DEFAULT_CHART_URL = `${base}/TheNextArcady.zip`;
-  const DEFAULT_CHART_SOURCE_NAME = 'TheNextArcady.zip';
-  const DEFAULT_CHART_LOADED_KEY = 'defaultChartLoaded:TheNextArcady';
+  const DEFAULT_CHART_URL = `${base}/Default.zip`;
+  const DEFAULT_CHART_SOURCE_NAME = 'Default.zip';
+  const DEFAULT_CHART_LOADED_KEY = 'defaultChartLoaded:Default';
+  const DEFAULT_CHART_LOADED_VER = "1";
 
   const RELOAD_CHART_KEY = 'reloadChartId';
   let duplicateModal: HTMLDialogElement;
@@ -324,14 +325,14 @@
   };
 
   /**
-   * Load the bundled default chart (`static/TheNextArcady.zip`) on first
+   * Load the bundled default chart (`static/Default.zip`) on first
    * startup so the web opens with a chart ready to play. Runs only when there
    * is no stored chart yet and no other chart source (URL params, reload flag,
    * or an already-loaded working state) took over. Idempotent via a
    * localStorage flag plus a stored-chart check, so refreshes don't reimport.
    */
   const loadDefaultChartIfNeeded = async () => {
-    if (localStorage.getItem(DEFAULT_CHART_LOADED_KEY)) return;
+    if (localStorage.getItem(DEFAULT_CHART_LOADED_KEY) == DEFAULT_CHART_LOADED_VER) return;
     // Don't steal an explicit chart source: URL params, the offset-reload
     // flag, or an already-loaded working state mean input was chosen. These
     // early returns deliberately don't set the flag so a later plain visit
@@ -349,7 +350,7 @@
     try {
       await refreshStoredSummaries();
       if (storedChartSummaries.length > 0) {
-        localStorage.setItem(DEFAULT_CHART_LOADED_KEY, '1');
+        localStorage.setItem(DEFAULT_CHART_LOADED_KEY, DEFAULT_CHART_LOADED_VER);
         return;
       }
       const response = await fetch(DEFAULT_CHART_URL);
@@ -362,7 +363,7 @@
       const files = groups.flat();
       if (files.length === 0) return;
       await handleFiles(files, undefined, DEFAULT_CHART_SOURCE_NAME);
-      localStorage.setItem(DEFAULT_CHART_LOADED_KEY, '1');
+      localStorage.setItem(DEFAULT_CHART_LOADED_KEY, DEFAULT_CHART_LOADED_VER);
     } catch (e) {
       console.warn('Failed to load default chart:', e);
     }
